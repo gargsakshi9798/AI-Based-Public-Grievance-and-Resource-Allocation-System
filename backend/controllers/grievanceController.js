@@ -47,10 +47,18 @@ const buildFilter = (query, user) => {
 // ─── @POST /api/grievances ────────────────────────────────────────────────────
 exports.createGrievance = async (req, res, next) => {
   try {
-    const {
+    let {
       title, description, category, subCategory,
       location, isAnonymous,
     } = req.body;
+
+    if (typeof location === 'string') {
+      try {
+        location = JSON.parse(location);
+      } catch {
+        location = {};
+      }
+    }
 
     // Build attachments list from uploaded files
     const attachments = (req.files || []).map((f) => ({
@@ -67,7 +75,7 @@ exports.createGrievance = async (req, res, next) => {
       category,
       subCategory,
       location,
-      isAnonymous: isAnonymous || false,
+      isAnonymous: isAnonymous === true || isAnonymous === 'true',
       citizen: req.user._id,
       attachments,
       statusHistory: [{ status: 'pending', changedBy: req.user._id }],
