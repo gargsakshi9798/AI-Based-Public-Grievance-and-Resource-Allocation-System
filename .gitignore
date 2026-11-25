@@ -1,6 +1,7 @@
 node_modules/
 frontend/.next/
 frontend/node_modules/
+ai-engine/models/*.joblib
 .env
 logs/*.log
 uploads/grievances/*

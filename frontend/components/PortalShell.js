@@ -43,7 +43,7 @@ export default function PortalShell({ children, allowed }) {
   const links = [
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/grievances', label: user.role === 'citizen' ? 'My grievances' : 'Grievances' },
-    ...(user.role === 'citizen' || staff ? [{ href: '/grievances/new', label: 'Lodge grievance' }] : []),
+    ...(user.role === 'citizen' ? [{ href: '/grievances/new', label: 'Lodge grievance' }] : []),
     { href: '/track', label: 'Public tracking' },
     ...(staff ? [{ href: '/resources', label: 'Resources' }, { href: '/allocations', label: 'Allocations' }] : []),
     { href: '/departments', label: 'Departments' },

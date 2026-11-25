@@ -1,8 +1,11 @@
+const { spawn } = require('child_process');
+const path = require('path');
 const OpenAI = require('openai');
 const Grievance = require('../models/Grievance');
 const Resource = require('../models/Resource');
 const Department = require('../models/Department');
 const logger = require('../config/logger');
+const { classifyLocal } = require('./localNlp');
 
 // Lazy-initialise the client so the app still boots even if the key is missing
 let openaiClient = null;
@@ -43,8 +46,71 @@ const safeParseJSON = (text) => {
  * @param {import('../models/Grievance')} grievance  Mongoose document
  * @returns {Promise<Object>} The AI result object
  */
+const runSklearnClassifier = (title, description) =>
+  new Promise((resolve) => {
+    const script = path.join(__dirname, '../../ai-engine/predict.py');
+    const bin = process.platform === 'win32' ? 'py' : 'python3';
+    const child = spawn(bin, process.platform === 'win32' ? ['-3', script] : [script], { windowsHide: true });
+    let out = '';
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const timer = setTimeout(() => {
+      try { child.kill(); } catch { /* ignore */ }
+      finish(null);
+    }, 8000);
+    child.stdout.on('data', (chunk) => { out += chunk; });
+    child.on('error', () => {
+      clearTimeout(timer);
+      finish(null);
+    });
+    child.on('close', () => {
+      clearTimeout(timer);
+      try {
+        finish(JSON.parse(out));
+      } catch {
+        finish(null);
+      }
+    });
+    child.stdin.write(JSON.stringify({ title, description }));
+    child.stdin.end();
+  });
+
+const persistClassification = async (grievance, result) => {
+  const aiCategory = VALID_CATEGORIES.includes(result.category) ? result.category : grievance.category;
+  const aiPriority = VALID_PRIORITIES.includes(result.priority) ? result.priority : grievance.priority;
+  const update = {
+    aiCategory,
+    aiPriority,
+    aiSummary: result.summary || '',
+    aiConfidenceScore: result.confidenceScore ?? result.sentimentScore ?? 0,
+    aiMethod: result.method || 'nlp',
+    priority: aiPriority,
+    category: aiCategory,
+    aiProcessed: true,
+  };
+  if (typeof result.sentimentScore === 'number') {
+    update.aiSentimentScore = Math.max(-1, Math.min(1, result.sentimentScore));
+  }
+  if (result.subCategory) update.subCategory = result.subCategory;
+  await Grievance.findByIdAndUpdate(grievance._id, update);
+  Object.assign(grievance, update);
+  logger.info(`AI classification complete for ${grievance.trackingId}: category=${aiCategory}, priority=${aiPriority}, method=${update.aiMethod}`);
+  return { aiCategory, aiPriority, summary: update.aiSummary, confidenceScore: update.aiConfidenceScore };
+};
+
 const classifyGrievance = async (grievance) => {
-  const prompt = `You are an AI assistant for a government public grievance portal.
+  try {
+    const sklearn = await runSklearnClassifier(grievance.title, grievance.description);
+    if (sklearn && sklearn.method === 'sklearn_nb' && VALID_CATEGORIES.includes(sklearn.category)) {
+      return persistClassification(grievance, sklearn);
+    }
+
+    if (process.env.OPENAI_API_KEY) {
+      const prompt = `You are an AI assistant for a government public grievance portal.
 Analyze the following citizen grievance and return a JSON object with these fields:
 - category: one of [${VALID_CATEGORIES.join(', ')}]
 - priority: one of [${VALID_PRIORITIES.join(', ')}]
@@ -52,6 +118,7 @@ Analyze the following citizen grievance and return a JSON object with these fiel
 - summary: a concise 1–2 sentence summary (max 150 words)
 - subCategory: a short specific sub-category label (e.g. "pothole", "water leakage")
 - reasoning: brief explanation of your classification
+- confidenceScore: float 0–1
 
 Grievance Title: ${grievance.title}
 Grievance Description: ${grievance.description}
@@ -59,50 +126,31 @@ Submitted Category (citizen-chosen): ${grievance.category}
 
 Respond ONLY with valid JSON, no extra text.`;
 
-  try {
-    const client = getClient();
-    const response = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2,
-      max_tokens: 400,
-    });
-
-    const content = response.choices[0]?.message?.content || '';
-    const result = safeParseJSON(content);
-
-    if (!result) {
-      logger.warn(`AI classification returned unparseable response for ${grievance.trackingId}`);
-      return null;
+      try {
+        const client = getClient();
+        const response = await client.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.2,
+          max_tokens: 400,
+        });
+        const content = response.choices[0]?.message?.content || '';
+        const result = safeParseJSON(content);
+        if (result) {
+          result.method = 'openai';
+          return persistClassification(grievance, result);
+        }
+      } catch (err) {
+        logger.warn(`OpenAI classification skipped: ${err.message}`);
+      }
     }
 
-    // Validate and sanitise
-    const aiCategory = VALID_CATEGORIES.includes(result.category) ? result.category : grievance.category;
-    const aiPriority = VALID_PRIORITIES.includes(result.priority) ? result.priority : grievance.priority;
-    const aiSentimentScore = typeof result.sentimentScore === 'number'
-      ? Math.max(-1, Math.min(1, result.sentimentScore))
-      : 0;
-
-    // Persist back to grievance
-    await Grievance.findByIdAndUpdate(grievance._id, {
-      aiCategory,
-      aiPriority,
-      aiSentimentScore,
-      aiSummary: result.summary || '',
-      subCategory: result.subCategory || grievance.subCategory,
-      // If AI disagrees significantly on priority, escalate
-      priority: aiPriority,
-      aiProcessed: true,
-    });
-
-    logger.info(`AI classification complete for ${grievance.trackingId}: category=${aiCategory}, priority=${aiPriority}`);
-
-    return { aiCategory, aiPriority, aiSentimentScore, summary: result.summary, reasoning: result.reasoning };
+    const local = classifyLocal(grievance.title, grievance.description);
+    return persistClassification(grievance, local);
   } catch (err) {
     logger.error(`AI classification error for ${grievance.trackingId}: ${err.message}`);
-    // Mark as processed even on failure so we don't retry indefinitely
-    await Grievance.findByIdAndUpdate(grievance._id, { aiProcessed: true });
-    throw err;
+    const local = classifyLocal(grievance.title, grievance.description);
+    return persistClassification(grievance, local);
   }
 };
 

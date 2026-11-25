@@ -1,0 +1,40 @@
+text,category
+There is a large pothole on the main road near the market,infrastructure
+The road is damaged and vehicles cannot pass safely,infrastructure
+Broken footpath in front of the school gate,infrastructure
+Public park railing is broken and unsafe,infrastructure
+Garbage has not been collected from our street for five days,sanitation
+Waste is dumped near the residential colony,sanitation
+Overflowing dustbins and filthy surroundings,sanitation
+Sewage is leaking on the street,sanitation
+There is no water supply in our area for the last two days,water_supply
+Major water leakage from the municipal pipeline,water_supply
+Drinking water shortage in the ward,water_supply
+Tap is dry since yesterday morning,water_supply
+Streetlight is not working on our lane,electricity
+Power supply problem in the locality,electricity
+Transformer sparking near the pole,electricity
+Electricity outage for several hours,electricity
+Hospital does not have medicines,healthcare
+Ambulance did not arrive on time,healthcare
+Primary health centre is closed during duty hours,healthcare
+School building roof is leaking,education
+No teacher in the government school class,education
+Unsafe street at night due to crime,public_safety
+Accident prone junction needs traffic police,public_safety
+City bus is not stopping at the designated stand,transportation
+Traffic signal is not functioning,transportation
+Air pollution from the nearby factory,environment
+Blocked drain causing waterlogging,environment
+Ration card benefit not received,social_welfare
+Pension has not been credited,social_welfare
+Officer demanded a bribe for a simple certificate,corruption
+Illegal collection of money at the counter,corruption
+General civic issue in the neighbourhood,other
+Need help with a municipal service request,other
+Open manhole on the road is dangerous,infrastructure
+Garbage not collected from our street for the last four days,sanitation
+No water supply in my area for three days,water_supply
+Broken streetlight near the park,electricity
+Blocked drainage and stagnant water,environment
+Damaged roads and potholes after rain,infrastructure

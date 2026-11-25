@@ -1,6 +1,6 @@
 const Grievance = require('../models/Grievance');
-const { classifyGrievance } = require('../services/aiService');
-const { sendGrievanceNotification } = require('../services/notificationService');
+const { classifyGrievance, autoRouteToDepartment } = require('../services/aiService');
+const { sendGrievanceNotification, notifyDepartmentOfficers } = require('../services/notificationService');
 const logger = require('../config/logger');
 
 // ─── Helper: build filter from query params ────────────────────────────────────
@@ -81,10 +81,17 @@ exports.createGrievance = async (req, res, next) => {
       statusHistory: [{ status: 'pending', changedBy: req.user._id }],
     });
 
-    // Run AI classification asynchronously (don't block response)
-    classifyGrievance(grievance).catch((err) =>
-      logger.error(`AI classification failed for ${grievance.trackingId}: ${err.message}`)
-    );
+    // Report methodology: classify → priority → department allocation (background)
+    classifyGrievance(grievance)
+      .then(async () => {
+        const routed = await autoRouteToDepartment(grievance);
+        if (routed) {
+          await notifyDepartmentOfficers(routed._id, grievance);
+        }
+      })
+      .catch((err) =>
+        logger.error(`AI classification/routing failed for ${grievance.trackingId}: ${err.message}`)
+      );
 
     // Notify citizen
     sendGrievanceNotification('submitted', grievance, req.user).catch((err) =>
@@ -205,7 +212,7 @@ exports.updateGrievance = async (req, res, next) => {
       if (location) grievance.location = location;
     } else {
       // Officers / admins can update more fields
-      const { status, priority, assignedTo, department, expectedResolutionDate } = req.body;
+      const { status, priority, assignedTo, department, expectedResolutionDate, resolutionDetails } = req.body;
       const previousStatus = grievance.status;
 
       if (status) grievance.status = status;
@@ -213,6 +220,7 @@ exports.updateGrievance = async (req, res, next) => {
       if (assignedTo !== undefined) grievance.assignedTo = assignedTo;
       if (department !== undefined) grievance.department = department;
       if (expectedResolutionDate) grievance.expectedResolutionDate = expectedResolutionDate;
+      if (resolutionDetails !== undefined) grievance.resolutionDetails = resolutionDetails;
 
       if (status === 'resolved') grievance.resolvedAt = new Date();
       if (status === 'closed') grievance.closedAt = new Date();

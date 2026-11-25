@@ -90,7 +90,10 @@ const grievanceSchema = new mongoose.Schema(
     aiPriority: { type: String },
     aiSentimentScore: { type: Number, min: -1, max: 1 },
     aiSummary: { type: String, maxlength: 500 },
+    aiConfidenceScore: { type: Number, min: 0, max: 1 },
+    aiMethod: { type: String },
     aiProcessed: { type: Boolean, default: false },
+    resolutionDetails: { type: String, maxlength: 2000 },
 
     citizen: {
       type: mongoose.Schema.Types.ObjectId,

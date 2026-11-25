@@ -19,7 +19,7 @@ export default function GrievanceDetailPage() {
   const [note, setNote] = useState('');
   const [comment, setComment] = useState('');
   const [internal, setInternal] = useState(false);
-  const [staff, setStaff] = useState({ status: '', priority: '', assignedTo: '', department: '', expectedResolutionDate: '' });
+  const [staff, setStaff] = useState({ status: '', priority: '', assignedTo: '', department: '', expectedResolutionDate: '', resolutionDetails: '' });
   const [departments, setDepartments] = useState([]);
   const [officers, setOfficers] = useState([]);
   const [aiText, setAiText] = useState('');
@@ -43,6 +43,7 @@ export default function GrievanceDetailPage() {
       assignedTo: idOf(d.assignedTo),
       department: idOf(d.department),
       expectedResolutionDate: d.expectedResolutionDate ? String(d.expectedResolutionDate).slice(0, 10) : '',
+      resolutionDetails: d.resolutionDetails || '',
     });
   }, [id]);
 
@@ -132,10 +133,15 @@ export default function GrievanceDetailPage() {
         <div className="card ai-box">
           <h3 style={{ marginTop: 0 }}>AI assessment</h3>
           <p><strong>Processed:</strong> {g.aiProcessed ? 'Yes' : 'Pending'}</p>
+          <p><strong>Method:</strong> {g.aiMethod || '—'}</p>
           <p><strong>AI category:</strong> {labelize(g.aiCategory)}</p>
           <p><strong>AI priority:</strong> {labelize(g.aiPriority)}</p>
+          <p><strong>Confidence:</strong> {g.aiConfidenceScore != null ? `${Math.round(g.aiConfidenceScore * 100)}%` : '—'}</p>
           <p><strong>Sentiment:</strong> {g.aiSentimentScore ?? '—'}</p>
           <p>{g.aiSummary || 'Summary will appear after classification.'}</p>
+          {g.resolutionDetails && (
+            <p><strong>Officer resolution:</strong> {g.resolutionDetails}</p>
+          )}
           {staffUser && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => run(async () => { await api(`/ai/classify/${id}`, { method: 'POST' }); })}>Re-classify</button>
@@ -195,6 +201,7 @@ export default function GrievanceDetailPage() {
                 assignedTo: staff.assignedTo || null,
                 department: staff.department || null,
                 expectedResolutionDate: staff.expectedResolutionDate || undefined,
+                resolutionDetails: staff.resolutionDetails,
               }),
             }));
           }}
@@ -233,6 +240,10 @@ export default function GrievanceDetailPage() {
           <div className="field">
             <label>Expected resolution date</label>
             <input type="date" value={staff.expectedResolutionDate} onChange={(e) => setStaff({ ...staff, expectedResolutionDate: e.target.value })} />
+          </div>
+          <div className="field">
+            <label>Remarks and resolution details</label>
+            <textarea value={staff.resolutionDetails} onChange={(e) => setStaff({ ...staff, resolutionDetails: e.target.value })} placeholder="Action taken, site visit notes, or final resolution" />
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-navy" type="submit">Save official update</button>
